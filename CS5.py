@@ -24,7 +24,7 @@ class Planet:
     def plName(self):
          return self.name
 
-def positions(planets,timestamps,dt):
+def initialize(planets,timestamps):
         num_planets = len(planets)
 
         pos = np.zeros((timestamps, num_planets,2))
@@ -50,44 +50,97 @@ def positions(planets,timestamps,dt):
                         r = pos[0, j] - pos[0, k]
                         sum_acc += (planets[k].mass / np.linalg.norm(r)**3) * r
             acc[0, j] = -G * sum_acc
+
+        return num_planets, pos, acc, vel
+
+
+def beeman_positions(planets,timestamps,dt):
+
+    num_planets, pos, acc, vel = initialize(planets,timestamps)
                     
                     
-        for i in range(timestamps-1):
+    for i in range(timestamps-1):
         
-            pos[i+1] = pos[i] + vel[i] * dt + 0.5 * acc[i] * dt**2
+        pos[i+1] = pos[i] + vel[i] * dt + 0.5 * acc[i] * dt**2
             
             
-            for j in range(num_planets):
-                sum_acc = np.zeros(2)
+        for j in range(num_planets):
+            sum_acc = np.zeros(2)
 
-                for k in range(num_planets):
+            for k in range(num_planets):
 
-                    if k != j:
-                        r = pos[i+1, j] - pos[i+1, k]
-                        sum_acc += (planets[k].mass / np.linalg.norm(r)**3) * r
+                if k != j:
+                    r = pos[i+1, j] - pos[i+1, k]
+                    sum_acc += (planets[k].mass / np.linalg.norm(r)**3) * r
 
-                acc[i+1, j] = -G * sum_acc
+            acc[i+1, j] = -G * sum_acc
             
             
-            vel[i+1] = vel[i] + 0.5 * (acc[i] + acc[i+1]) * dt
+        vel[i+1] = vel[i] + 0.5 * (acc[i] + acc[i+1]) * dt
 
-        return pos
+    return pos, vel
 
-           
+def eulercromer_positions(planets,timestamps,dt):
+
+    num_planets, pos, acc, vel = initialize(planets,timestamps)
+                    
+                    
+    for i in range(timestamps-1):
         
-    
+        vel[i+1] = vel[i] + acc[i] * dt
+            
+        pos[i+1] = pos[i] + vel[i+1] * dt
+
+        for j in range(num_planets):
+            sum_acc = np.zeros(2)
+
+            for k in range(num_planets):
+
+                if k != j:
+                    r = pos[i+1, j] - pos[i+1, k]
+                    sum_acc += (planets[k].mass / np.linalg.norm(r)**3) * r
+
+            acc[i+1, j] = -G * sum_acc
+
+    return pos, vel           
+        
+def euler_positions(planets,timestamps,dt):
+    num_planets, pos, acc, vel = initialize(planets,timestamps)
+                    
+                    
+    for i in range(timestamps-1):
+            
+        pos[i+1] = pos[i] + vel[i] * dt
+
+        vel[i+1] = vel[i] + acc[i] * dt
+            
+            
+
+        for j in range(num_planets):
+            sum_acc = np.zeros(2)
+
+            for k in range(num_planets):
+
+                if k != j:
+                    r = pos[i+1, j] - pos[i+1, k]
+                    sum_acc += (planets[k].mass / np.linalg.norm(r)**3) * r
+
+            acc[i+1, j] = -G * sum_acc
+                
+    return pos, vel      
 
 class Animation:
 
-    def __init__(self,planets,timestamps,dt):
+    def __init__(self,method,planets,timestamps,dt):
 
         self.planets = planets
         self.timestamps = timestamps
         self.dt = dt
         self.fig, self.ax = plt.subplots()
+        self.method = str(method)
 
-
-        self.pos = positions(planets,timestamps,dt)
+        self.pos, _ = method(planets,timestamps,dt)
+        _, self.vel = method(planets,timestamps,dt)
         
         #x_min, x_max = np.min(self.pos[:, :, 0]),  np.max(self.pos[:, :, 0])
         y_min, y_max = np.min(self.pos[:, :, 1]),  np.max(self.pos[:, :, 1])
@@ -121,19 +174,75 @@ class Animation:
                                 interval=20, blit=True)
         plt.show()
                     
-    '''def calculate_periods(self):  
+    def calculate_periods(self):  
         """ Calculate orbital periods for each planet."""
         orbital_periods = []
         for i in range(len(self.planets)):
+    
+             if np.array_equal(self.pos[0, i], np.array([0.0, 0.0])):
+                orbitedPos = self.pos[:,i] 
+                
+             
+        for i in range(len(self.planets)):
              t = 0
-             # since we can't calucalte the orbit of the sun around the sun
-             if (self.pos[0,i,0]) == float(0) and (self.pos[0,i,1] == float(0)):
-                 t = 0
-             else:
-                 while (self.pos[t,i,1] < 0 and self.pos[t+1,i,1] > 0) == False:
-                     t+=1
+             if not(np.array_equal(self.pos[:,i] , orbitedPos)):
+
+                while (self.pos[t,i,1] - orbitedPos[t,1] < 0 and self.pos[t+1,i,1] - orbitedPos[t+1,1] > 0) == False:
+
+                        t+=1
+
              orbital_periods.append(t*self.dt)
-             print(planet.name[i], "has period ", orbital_periods[i])     '''      
+             print(self.planets[i].name, "has period ", orbital_periods[i])        
+
+
+    def total_energy(self,pos,vel):
+        total_energy = []
+        
+
+
+        num_planets = len(self.planets)  
+
+        for i in range(self.timestamps-1):
+            sum_pot = 0
+            sum_kin = 0
+
+            for j in range(num_planets):
+
+                sum_kin = sum_kin + 1/2 * self.planets[j].mass * np.linalg.norm(vel[i,j]) ** 2
+
+                for k in range(num_planets):
+
+                    if k != j:
+                        r = pos[i+1, j] - pos[i+1, k]
+                        sum_pot = sum_pot + (G* self.planets[k].mass * self.planets[j].mass/ np.linalg.norm(r))
+                        
+
+            total_energy += [-1/2 * sum_pot + sum_kin]
+
+        return total_energy
+    
+    def graph_energy(self):
+        b_pos, b_vel = beeman_positions(self.planets,self.timestamps,self.dt)
+        ec_pos, ec_vel = eulercromer_positions(self.planets,self.timestamps,self.dt)
+        e_pos, e_vel = euler_positions(self.planets,self.timestamps,self.dt)
+
+        b_tot = self.total_energy(b_pos,b_vel)
+        ec_tot = self.total_energy(ec_pos,ec_vel)
+        e_tot = self.total_energy(e_pos,e_vel)
+
+
+        stamps = np.linspace(0,self.timestamps-1,self.timestamps-1)
+
+        plt.plot(stamps, b_tot, label = 'Beeman Method', color = 'blue', linestyle='-')
+        plt.plot(stamps, ec_tot, label = 'Euler-Cromer Method', color = 'red', linestyle='--')
+        plt.plot(stamps, e_tot, label = 'Euler Method', color = 'green', linestyle=':')
+        plt.title('Total Energy for Different Methods')
+        plt.xlabel('Timestamp')
+        plt.ylabel('Total Energy')
+        plt.legend()
+        plt.show()
+
+            
 
 
 def main():
@@ -151,10 +260,10 @@ def main():
     
     
     
-    #self,planets,timestamps,dt
-    a = Animation(planets,parameters_solar['num_iterations'],parameters_solar['timestep'])
+    #self,method,planets,timestamps,dt
+    a = Animation(euler_positions,planets,parameters_solar['num_iterations'],parameters_solar['timestep'])
     a.run()
-    a.calculate_periods()
+    a.graph_energy()
     
     
 main()
